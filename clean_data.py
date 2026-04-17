@@ -25,6 +25,7 @@ def main() -> None:
 
         dataset_summary = report["dataset_summary"]
         duplicate_summary = report["duplicate_summary"]
+        issue_summary = report.get("issue_summary", {})
 
         print("Dataset loaded and profiled successfully")
         print(f"Input file: {input_path}")
@@ -35,8 +36,18 @@ def main() -> None:
             f"{duplicate_summary['duplicate_row_count']} "
             f"({duplicate_summary['duplicate_row_rate']:.2%})"
         )
-        print(f"JSON report written to: {json_output_path}")
-        print(f"Text summary written to: {text_output_path}")
+
+        print("\nTop issue counts:")
+        if issue_summary:
+            top_issues = list(issue_summary.items())[:5]
+            for issue_name, count in top_issues:
+                print(f"- {issue_name}: {count}")
+        else:
+            print("- No issues detected")
+
+        print("\nOutputs:")
+        print(f"- JSON report: {json_output_path}")
+        print(f"- Text summary: {text_output_path}")
 
     except Exception as exc:
         print(f"Error: {exc}")

@@ -2,6 +2,10 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Union
 
+import json
+from pathlib import Path
+from typing import Any, Dict, Union
+
 
 def ensure_directory(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
@@ -18,6 +22,7 @@ def write_json_report(report: Dict[str, Any], output_path: Union[str, Path]) -> 
 def build_text_summary(report: Dict[str, Any]) -> str:
     dataset_summary = report.get("dataset_summary", {})
     duplicate_summary = report.get("duplicate_summary", {})
+    issue_summary = report.get("issue_summary", {})
     columns = report.get("columns", [])
 
     lines = []
@@ -30,6 +35,16 @@ def build_text_summary(report: Dict[str, Any]) -> str:
         f"({duplicate_summary.get('duplicate_row_rate', 0):.2%})"
     )
     lines.append("")
+
+    lines.append("ISSUE SUMMARY")
+    lines.append("-" * 60)
+    if issue_summary:
+        for issue_name, count in issue_summary.items():
+            lines.append(f"- {issue_name}: {count}")
+    else:
+        lines.append("No dataset-level issues detected.")
+    lines.append("")
+
     lines.append("COLUMN OVERVIEW")
     lines.append("-" * 60)
 

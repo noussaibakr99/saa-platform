@@ -41,6 +41,7 @@ def profile_dataset(df: pd.DataFrame) -> Dict[str, Any]:
     - dataset-level summary
     - duplicate statistics
     - column-by-column profiling
+    - dataset-level issue counts
     """
     column_profiles = []
 
@@ -51,10 +52,24 @@ def profile_dataset(df: pd.DataFrame) -> Dict[str, Any]:
     profile = {
         "dataset_summary": get_dataset_summary(df),
         "duplicate_summary": get_duplicate_summary(df),
+        "issue_summary": get_issue_summary(column_profiles),
         "columns": column_profiles,
     }
 
     return profile
+
+def get_issue_summary(column_profiles: List[Dict[str, Any]]) -> Dict[str, int]:
+    """
+    Count how many times each issue appears across all column profiles.
+    """
+    issue_counts: Dict[str, int] = {}
+
+    for column_profile in column_profiles:
+        issues = column_profile.get("issues", [])
+        for issue in issues:
+            issue_counts[issue] = issue_counts.get(issue, 0) + 1
+
+    return dict(sorted(issue_counts.items(), key=lambda item: item[1], reverse=True))
 
 
 def get_dataset_summary(df: pd.DataFrame) -> Dict[str, Any]:

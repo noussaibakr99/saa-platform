@@ -32,3 +32,4 @@ data/reports/*
 !data/processed/.gitkeep
 !data/reports/.gitkeep
 !logs/.gitkeep
+!data/sample/

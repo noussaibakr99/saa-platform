@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: saa-platform
+Version: 0.1.0
+Summary: Portfolio data engine for strategic asset allocation
+Requires-Python: >=3.9
+Requires-Dist: pandas
+Requires-Dist: openpyxl

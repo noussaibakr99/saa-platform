@@ -1,57 +1,57 @@
-import sys
+import argparse
 from pathlib import Path
 
 from saa_platform.ingestion import load_dataset
 from saa_platform.profiling import profile_dataset
+from saa_platform.cleaning import clean_dataset
 from saa_platform.reporting import write_json_report, write_text_summary
+from saa_platform.validation import validate_financial_data
 
 
-def main() -> None:
-    if len(sys.argv) < 2:
-        print("Usage: python clean_data.py <input_file>")
-        sys.exit(1)
+def main():
+    parser = argparse.ArgumentParser(description="SAA Data Cleaning Tool")
 
-    input_path = Path(sys.argv[1])
+    parser.add_argument("input_path", help="Path to dataset")
+    parser.add_argument("--profile-only", action="store_true")
+    parser.add_argument("--clean-only", action="store_true")
+    parser.add_argument("--output-dir", default="data/")
+    parser.add_argument("--strict", action="store_true")
 
-    try:
-        df = load_dataset(input_path)
-        report = profile_dataset(df)
+    args = parser.parse_args()
 
-        json_output_path = Path("data/reports/profile_report.json")
-        text_output_path = Path("data/reports/profile_summary.txt")
+    df = load_dataset(args.input_path)
 
-        write_json_report(report, json_output_path)
-        write_text_summary(report, text_output_path)
+    output_dir = Path(args.output_dir)
+    reports_dir = output_dir / "reports"
+    processed_dir = output_dir / "processed"
+    logs_dir = Path("logs")
 
-        dataset_summary = report["dataset_summary"]
-        duplicate_summary = report["duplicate_summary"]
-        issue_summary = report.get("issue_summary", {})
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
 
-        print("Dataset loaded and profiled successfully")
-        print(f"Input file: {input_path}")
-        print(f"Rows: {dataset_summary['row_count']}")
-        print(f"Columns: {dataset_summary['column_count']}")
-        print(
-            "Duplicate rows: "
-            f"{duplicate_summary['duplicate_row_count']} "
-            f"({duplicate_summary['duplicate_row_rate']:.2%})"
-        )
+    print("Profiling dataset...")
+    profile_before = profile_dataset(df)
 
-        print("\nTop issue counts:")
-        if issue_summary:
-            top_issues = list(issue_summary.items())[:5]
-            for issue_name, count in top_issues:
-                print(f"- {issue_name}: {count}")
-        else:
-            print("- No issues detected")
+    write_json_report(profile_before, reports_dir / "profile_before.json")
 
-        print("\nOutputs:")
-        print(f"- JSON report: {json_output_path}")
-        print(f"- Text summary: {text_output_path}")
+    if args.profile_only:
+        print("Profile-only mode complete.")
+        return
 
-    except Exception as exc:
-        print(f"Error: {exc}")
-        sys.exit(1)
+    print("Cleaning dataset...")
+    cleaned_df, cleaning_log = clean_dataset(df, profile_before)
+
+    if not args.clean_only:
+        print("Running financial validation...")
+        validation_report = validate_financial_data(cleaned_df)
+        write_json_report(validation_report, reports_dir / "validation_report.json")
+
+    cleaned_df.to_excel(processed_dir / "cleaned_data.xlsx", index=False)
+
+    write_json_report(cleaning_log, logs_dir / "cleaning_log.json")
+
+    print("Pipeline completed successfully.")
 
 
 if __name__ == "__main__":

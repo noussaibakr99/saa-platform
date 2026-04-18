@@ -1,0 +1,2 @@
+[console_scripts]
+saa-clean = saa_platform.cli:main

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+import warnings
+from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 
@@ -34,14 +35,26 @@ COMMON_NULL_STRINGS = {
     "--",
 }
 
+# Common formats used for safer datetime profiling.
+COMMON_DATE_FORMATS = [
+    "%Y-%m-%d",
+    "%Y/%m/%d",
+    "%d/%m/%Y",
+    "%d-%m-%Y",
+    "%m/%d/%Y",
+    "%m-%d-%Y",
+    "%d.%m.%Y",
+    "%Y.%m.%d",
+]
+
 
 def profile_dataset(df: pd.DataFrame) -> Dict[str, Any]:
     """
     Create a full dataset profile containing:
     - dataset-level summary
     - duplicate statistics
-    - column-by-column profiling
     - dataset-level issue counts
+    - column-by-column profiling
     """
     column_profiles = []
 
@@ -57,19 +70,6 @@ def profile_dataset(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
     return profile
-
-def get_issue_summary(column_profiles: List[Dict[str, Any]]) -> Dict[str, int]:
-    """
-    Count how many times each issue appears across all column profiles.
-    """
-    issue_counts: Dict[str, int] = {}
-
-    for column_profile in column_profiles:
-        issues = column_profile.get("issues", [])
-        for issue in issues:
-            issue_counts[issue] = issue_counts.get(issue, 0) + 1
-
-    return dict(sorted(issue_counts.items(), key=lambda item: item[1], reverse=True))
 
 
 def get_dataset_summary(df: pd.DataFrame) -> Dict[str, Any]:
@@ -127,6 +127,8 @@ def profile_column(series: pd.Series) -> Dict[str, Any]:
         "sample_values": sample_values,
         "issues": issues,
     }
+
+    profile["recommendations"] = generate_recommendations(profile)
 
     if inferred_type == "numeric":
         profile["numeric_summary"] = get_numeric_summary(series)
@@ -224,8 +226,46 @@ def get_numeric_like_ratio(series: pd.Series) -> float:
 
 
 def get_datetime_like_ratio(series: pd.Series) -> float:
-    converted = pd.to_datetime(series, errors="coerce")
-    return safe_divide(int(converted.notna().sum()), len(series))
+    """
+    Detect date-like columns while avoiding pandas format-inference warnings.
+    """
+    success_count, _best_format = try_parse_dates_with_best_strategy(series)
+    return safe_divide(success_count, len(series))
+
+
+def try_parse_dates_with_best_strategy(series: pd.Series) -> Tuple[int, str]:
+    """
+    Try several common formats first, then a generic parser.
+    Returns:
+    - best success count
+    - best parser label
+    """
+    best_success_count = -1
+    best_format = "none"
+
+    series_as_str = series.astype(str).str.strip()
+
+    # Try explicit formats first.
+    for date_format in COMMON_DATE_FORMATS:
+        converted_try = pd.to_datetime(series_as_str, format=date_format, errors="coerce")
+        success_count_try = int(converted_try.notna().sum())
+
+        if success_count_try > best_success_count:
+            best_success_count = success_count_try
+            best_format = date_format
+
+    # Fall back to the generic parser, but suppress the noisy warning.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        generic_converted = pd.to_datetime(series_as_str, errors="coerce")
+
+    generic_success_count = int(generic_converted.notna().sum())
+
+    if generic_success_count > best_success_count:
+        best_success_count = generic_success_count
+        best_format = "generic_parser"
+
+    return best_success_count, best_format
 
 
 def should_be_categorical(series: pd.Series, unique_ratio: float) -> bool:
@@ -238,11 +278,9 @@ def should_be_categorical(series: pd.Series, unique_ratio: float) -> bool:
     if row_count == 0:
         return False
 
-    # Low-cardinality columns are strong categorical candidates.
     if unique_count <= 20:
         return True
 
-    # A relatively small unique ratio also suggests categorical data.
     if row_count >= 50 and unique_ratio <= 0.2:
         return True
 
@@ -316,6 +354,61 @@ def detect_column_issues(series: pd.Series, inferred_type: str) -> List[str]:
     return issues
 
 
+def generate_recommendations(column_profile: Dict[str, Any]) -> List[Dict[str, str]]:
+    """
+    Generate user-friendly recommended actions for a column based on its issues.
+    """
+    recommendations = []
+
+    issues = column_profile.get("issues", [])
+    inferred_type = column_profile.get("inferred_type")
+    missing_rate = column_profile.get("missing_rate", 0)
+
+    if "numeric_stored_as_text" in issues:
+        recommendations.append({
+            "message": "Likely numeric column stored as text — convert to numeric type.",
+            "severity": "warning",
+        })
+
+    if "datetime_stored_as_text" in issues:
+        recommendations.append({
+            "message": "Likely date column stored as text — review and standardize date format.",
+            "severity": "warning",
+        })
+
+    if "boolean_stored_as_text" in issues:
+        recommendations.append({
+            "message": "Likely boolean column stored as text — consider boolean conversion.",
+            "severity": "info",
+        })
+
+    if missing_rate > 0.5:
+        recommendations.append({
+            "message": "High missingness — inspect business relevance before using this column.",
+            "severity": "warning",
+        })
+
+    if "mixed_format_values" in issues:
+        recommendations.append({
+            "message": "Mixed formats detected — manual review recommended before automated use.",
+            "severity": "critical",
+        })
+
+    if "single_unique_value" in issues:
+        recommendations.append({
+            "message": "Column has a single non-null value — check whether it is analytically useful.",
+            "severity": "info",
+        })
+
+    if inferred_type == "categorical":
+        recommendations.append({
+            "message": "Consider category normalization or mapping for consistent reporting.",
+            "severity": "info",
+        })
+
+    return recommendations
+
+
 def detect_whitespace_issue(series: pd.Series) -> bool:
     """
     Detect leading/trailing spaces or repeated internal spaces in text values.
@@ -359,9 +452,38 @@ def get_numeric_summary(series: pd.Series) -> Dict[str, Any]:
 
 def get_datetime_summary(series: pd.Series) -> Dict[str, Any]:
     """
-    Produce safe datetime summary after coercion.
+    Produce safe datetime summary after coercion, while avoiding noisy warnings.
     """
-    converted = pd.to_datetime(series, errors="coerce").dropna()
+    if pd.api.types.is_datetime64_any_dtype(series):
+        converted = series.dropna()
+    else:
+        series_non_null = series.dropna().astype(str).str.strip()
+
+        best_success_count = -1
+        best_converted = None
+
+        for date_format in COMMON_DATE_FORMATS:
+            converted_try = pd.to_datetime(series_non_null, format=date_format, errors="coerce")
+            success_count_try = int(converted_try.notna().sum())
+
+            if success_count_try > best_success_count:
+                best_success_count = success_count_try
+                best_converted = converted_try
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            generic_converted = pd.to_datetime(series_non_null, errors="coerce")
+
+        generic_success_count = int(generic_converted.notna().sum())
+
+        if generic_success_count > best_success_count:
+            best_converted = generic_converted
+
+        converted = (
+            best_converted.dropna()
+            if best_converted is not None
+            else pd.Series(dtype="datetime64[ns]")
+        )
 
     if converted.empty:
         return {}
@@ -370,6 +492,20 @@ def get_datetime_summary(series: pd.Series) -> Dict[str, Any]:
         "min_date": converted.min().isoformat(),
         "max_date": converted.max().isoformat(),
     }
+
+
+def get_issue_summary(column_profiles: List[Dict[str, Any]]) -> Dict[str, int]:
+    """
+    Count how many times each issue appears across all column profiles.
+    """
+    issue_counts: Dict[str, int] = {}
+
+    for column_profile in column_profiles:
+        issues = column_profile.get("issues", [])
+        for issue in issues:
+            issue_counts[issue] = issue_counts.get(issue, 0) + 1
+
+    return dict(sorted(issue_counts.items(), key=lambda item: item[1], reverse=True))
 
 
 def safe_divide(numerator: float, denominator: float) -> float:

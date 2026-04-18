@@ -27,9 +27,13 @@ data/raw/*
 data/processed/*
 data/reports/*
 
-# Keep folders visible
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-!data/reports/.gitkeep
-!logs/.gitkeep
-!data/sample/
+# Keep everything in data
+# (we now allow raw + processed)
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store

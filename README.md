@@ -125,6 +125,124 @@ Build a platform that:
 
 ⸻
 
+🚀 Quick Start — Run on Your Own Data
+
+Follow these steps to run the SAA Platform on your own dataset.
+
+⸻
+
+1. Clone the Repository
+
+git clone https://github.com/noussaibakr99/saa-platform.git
+cd saa-platform
+
+
+⸻
+
+2. Create a Virtual Environment
+
+python3 -m venv .venv
+source .venv/bin/activate
+
+
+⸻
+
+3. Install the Project
+
+pip install -e .
+
+This installs the tool and enables the saa-clean command.
+
+⸻
+
+4. Run the Tool on Your Dataset
+
+saa-clean /path/to/your_file.xlsx
+
+Example:
+
+saa-clean ~/Desktop/portfolio.xlsx
+
+
+⸻
+
+⚙️ Optional Commands
+
+Profile only (no cleaning or validation)
+
+saa-clean your_file.xlsx --profile-only
+
+Skip validation
+
+saa-clean your_file.xlsx --clean-only
+
+Custom output folder
+
+saa-clean your_file.xlsx --output-dir results/
+
+
+⸻
+
+📁 Outputs
+
+After running the tool, the following files will be generated:
+
+data/
+├── processed/
+│   └── cleaned_data.xlsx
+├── reports/
+│   ├── profile_report_before.json
+│   ├── profile_report_after.json
+│   ├── profile_comparison.json
+│   └── validation_report.json
+logs/
+└── cleaning_log.txt
+
+
+⸻
+
+📌 Supported Input Formats
+	•	Excel (.xlsx)
+	•	CSV (.csv)
+
+⸻
+
+❓ Help
+
+To see all available options:
+
+saa-clean --help
+
+
+⸻
+
+💡 Notes
+	•	You do NOT need to modify any code
+	•	Just provide your dataset path
+	•	Outputs are generated automatically
+	•	Works on any structured tabular financial dataset
+
+⸻
+
+🎯 Example Full Workflow
+
+git clone https://github.com/noussaibakr99/saa-platform.git
+cd saa-platform
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+
+saa-clean ~/Desktop/client_portfolio.xlsx
+
+
+⸻
+
+This will automatically:
+	•	profile the dataset
+	•	clean the data
+	•	validate financial consistency
+	•	export clean outputs and reports
+:::
 Author
 
 Noussaiba Krichene
